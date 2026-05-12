@@ -38,3 +38,12 @@ jobs:
 
       - name: 运行监控脚本
         run: python main.py
+
+      - name: 部署 HTML 到 GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./          # 因为我们生成的 index.html 在根目录
+          publish_branch: gh-pages # 推送到的分支
+          force_orphan: true       # 保持分支干净，只保留最新提交
+          commit_message: "更新监控页面 [skip ci]"
