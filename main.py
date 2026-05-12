@@ -17,7 +17,7 @@ CONFIG = {
         "subscribe_premium_2": 0.8,
         "redeem_premium": -0.8,
         "redeem_premium_2": -1.2,
-        "rotate_spread": -1.0,
+        "rotate_spread": 0.5,
         "rotate_spread_2": 1.0,
     },
     "cooldown_seconds_level1": 3600,
