@@ -351,7 +351,171 @@ def run_monitoring():
 
     # 保存冷却记录
     save_last_alerts(last_alerts)
+    # ===== 新增：生成 HTML 页面 =====
+    try:
+        html_content = render_html()
+        with open("index.html", "w", encoding="utf-8") as f:
+            f.write(html_content)
+        print("HTML 页面已生成")
+    except Exception as e:
+        print("生成 HTML 失败:", e)
+    # ================================
     print("监控完成。")
+
+def _fmt_price(value, digits=3):
+    if value is None:
+        return "/"
+    return ("{:." + str(digits) + "f}").format(value)
+
+def _fmt_pct(value):
+    return "/" if value is None else "{:.2f}%".format(value)
+
+def _html_escape(text):
+    raw = "" if text is None else str(text)
+    import html as _html_mod
+    return _html_mod.escape(raw)
+
+def _format_action(op_type, code, dir1, price1, qty1, dir2, price2, qty2, code2=None, profit=None):
+    p1 = "" if price1 is None else "{:.3f}".format(price1)
+    q1 = "" if qty1 is None else "{}".format(int(qty1))
+    p2 = "" if price2 is None else ("{:.4f}".format(price2) if op_type == "赎回" else "{:.3f}".format(price2))
+    q2 = "" if qty2 is None else "{}".format(int(qty2))
+    op_label = op_type if profit is None else "{}({})".format(op_type, profit if isinstance(profit, str) else int(profit))
+    offset = len(code2) + 1 if code2 else 0
+    prefix = " " * max(0, len(op_label) + len(code) - offset)
+    if code2:
+        return "{}|{}|{}|{}|{}\n{}>>>|{}|{}|{}|{}".format(op_label, code, dir1, p1, q1, prefix, code2, dir2, p2, q2)
+    return "{}|{}|{}|{}|{}\n{}>>>|{}|{}|{}".format(op_label, code, dir1, p1, q1, prefix, dir2, p2, q2)
+
+def _build_actions(snapshot):
+    lines = []
+    est1, est2 = snapshot["est1"], snapshot["est2"]
+    prem_bid1, prem_ask1 = snapshot["prem_bid1"], snapshot["prem_ask1"]
+    prem_bid2, prem_ask2 = snapshot["prem_bid2"], snapshot["prem_ask2"]
+    bid1, ask1 = snapshot["bid1"], snapshot["ask1"]
+    bid2, ask2 = snapshot["bid2"], snapshot["ask2"]
+    bid1_qty, ask1_qty = snapshot["bid1_qty"], snapshot["ask1_qty"]
+    bid2_qty, ask2_qty = snapshot["bid2_qty"], snapshot["ask2_qty"]
+
+    subscribe_threshold = CONFIG["thresholds"]["subscribe_premium"]
+    subscribe_threshold_2 = CONFIG["thresholds"].get("subscribe_premium_2", subscribe_threshold)
+    redeem_threshold = CONFIG["thresholds"]["redeem_premium"]
+    redeem_threshold_2 = CONFIG["thresholds"].get("redeem_premium_2", redeem_threshold)
+    rotate_threshold = CONFIG["thresholds"]["rotate_spread"]
+    rotate_threshold_2 = CONFIG["thresholds"].get("rotate_spread_2", rotate_threshold)
+    pos1 = CONFIG.get("positions", {}).get("160632", 0) or 0
+    pos2 = CONFIG.get("positions", {}).get("512690", 0) or 0
+
+    # 160632 申购
+    if prem_bid1 is not None and prem_bid1 > subscribe_threshold:
+        qty = _limit_qty(pos1, bid1_qty)
+        amt = None if bid1 is None or qty is None else bid1 * qty
+        profit = None if bid1 is None or est1 is None or qty is None else round((bid1 - est1) * qty)
+        lines.append(_level2_prefix(_format_action("申购", "160632", "卖出", bid1, qty, "申购", 1.0, None if amt is None else amt, profit=profit), prem_bid1 > subscribe_threshold_2))
+
+    # 160632 赎回
+    if prem_ask1 is not None and prem_ask1 < redeem_threshold:
+        qty = _limit_qty(pos1, ask1_qty)
+        amt = None if ask1 is None or qty is None else ask1 * qty
+        qty2 = None if amt is None or est1 in (None, 0) else amt / est1
+        profit = None if ask1 is None or est1 is None or qty is None else round((est1 * 0.995 - ask1) * qty)
+        lines.append(_level2_prefix(_format_action("赎回", "160632", "买入", ask1, qty, "赎回", est1, qty2, profit=profit), prem_ask1 < redeem_threshold_2))
+
+    # 512690 申购 / 赎回（同理，如果你想也加上，这里省略，或者你原代码就没有，按需添加）
+    # 原 Vercel 代码中 512690 的申购赎回是通过 _maybe_notify 处理的，但 _build_actions 里并没有单独列出，
+    # 为了页面完整，我们也可以加上 512690 的建议，如果你需要，告诉我，我补上。
+    # 以下只保留旋转建议
+
+    # 512690 -> 160632 旋转
+    if prem_bid2 is not None and prem_ask1 is not None:
+        spread = prem_bid2 - prem_ask1
+        if spread > rotate_threshold:
+            qty = _limit_qty(_limit_qty(pos2, bid2_qty), ask1_qty)
+            amt = None if bid2 is None or qty is None else bid2 * qty
+            qty2 = None if amt is None or ask1 in (None, 0) else amt / ask1
+            lines.append(_level2_prefix(_format_action("交换", "512690", "卖出", bid2, qty, "买入", ask1, qty2, "160632", "{:.2f}%".format(spread)), spread > rotate_threshold_2))
+
+    # 160632 -> 512690 旋转
+    if prem_bid1 is not None and prem_ask2 is not None:
+        spread = prem_bid1 - prem_ask2
+        if spread > rotate_threshold:
+            qty = _limit_qty(_limit_qty(pos1, bid1_qty), ask2_qty)
+            amt = None if bid1 is None or qty is None else bid1 * qty
+            qty2 = None if amt is None or ask2 in (None, 0) else amt / ask2
+            lines.append(_level2_prefix(_format_action("交换", "160632", "卖出", bid1, qty, "买入", ask2, qty2, "512690", "{:.2f}%".format(spread)), spread > rotate_threshold_2))
+
+    return lines
+
+def _build_view_model():
+    snapshot = _build_snapshot()
+    actions = _build_actions(snapshot)
+    index_change = snapshot["index_change"]
+    est1_text = "" if snapshot["est1"] is None else "{:.4f}".format(snapshot["est1"])
+    est2_text = "" if snapshot["est2"] is None else "{:.4f}".format(snapshot["est2"])
+    return {
+        "header": "" if index_change is None else "中证酒: {:.2f}%".format(index_change),
+        "header_class": "up" if index_change is not None and index_change >= 0 else "down" if index_change is not None else "flat",
+        "fund1_title": "160632  |   RTNV: {}".format(est1_text),
+        "fund2_title": "512690  |   RTNV: {}".format(est2_text),
+        "fund1_line1": "卖一: {0:>8}    溢价率: {1:>7}".format(_fmt_price(snapshot["ask1"]), _fmt_pct(snapshot["prem_ask1"])),
+        "fund1_line2": "买一: {0:>8}    溢价率: {1:>7}".format(_fmt_price(snapshot["bid1"]), _fmt_pct(snapshot["prem_bid1"])),
+        "fund2_line1": "卖一: {0:>8}    溢价率: {1:>7}".format(_fmt_price(snapshot["ask2"]), _fmt_pct(snapshot["prem_ask2"])),
+        "fund2_line2": "买一: {0:>8}    溢价率: {1:>7}".format(_fmt_price(snapshot["bid2"]), _fmt_pct(snapshot["prem_bid2"])),
+        "actions_text": "\n".join(actions),
+        "actions_class": "danger" if any(line.startswith("★") for line in actions) else "normal",
+        "status": "Updated {}".format(snapshot["now"].strftime("%Y-%m-%d %H:%M:%S")),
+    }
+
+def render_html():
+    try:
+        vm = _build_view_model()
+    except Exception as exc:
+        body = _html_escape("计算失败: {}".format(exc))
+        return """<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><title>酒基金监控</title></head>
+<body style="padding:20px;font-family:system-ui"><pre>{}</pre></body></html>""".format(body)
+
+    actions_block = _html_escape(vm["actions_text"] or "")
+    return """<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>酒基金实时折溢价监控</title>
+  <style>
+    body { margin: 0; background: #f5f7fa; color: #111827; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif; }
+    .page { max-width: 760px; margin: 0 auto; padding: 24px 18px 40px; }
+    .title { margin: 0 0 18px; font-size: 34px; font-weight: 700; }
+    .up { color: #d93025; } .down { color: #188038; } .flat { color: #111827; }
+    .section { margin-top: 18px; }
+    .fund-title { margin: 0 0 8px; font-size: 28px; font-weight: 700; }
+    .fund-title.blue { color: #1a73e8; } .fund-title.red { color: #d93025; }
+    .line { margin: 4px 0; font: 24px/1.45 Consolas, "Courier New", monospace; white-space: pre-wrap; }
+    .actions { margin-top: 22px; font: 22px/1.5 Consolas, "Courier New", monospace; white-space: pre-wrap; color: #111827; }
+    .actions.danger { color: #d93025; }
+    .status { margin-top: 24px; font-size: 18px; color: #4b5563; }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <h1 class="title __HEADER_CLASS__">__HEADER__</h1>
+    <div class="section"><div class="fund-title blue">__FUND1_TITLE__</div><div class="line">__FUND1_LINE1__</div><div class="line">__FUND1_LINE2__</div></div>
+    <div class="section"><div class="fund-title red">__FUND2_TITLE__</div><div class="line">__FUND2_LINE1__</div><div class="line">__FUND2_LINE2__</div></div>
+    <div class="actions __ACTIONS_CLASS__">__ACTIONS__</div>
+    <div class="status">__STATUS__</div>
+  </div>
+</body>
+</html>""".replace("__HEADER_CLASS__", vm["header_class"]) \
+        .replace("__HEADER__", _html_escape(vm["header"])) \
+        .replace("__FUND1_TITLE__", _html_escape(vm["fund1_title"])) \
+        .replace("__FUND1_LINE1__", _html_escape(vm["fund1_line1"])) \
+        .replace("__FUND1_LINE2__", _html_escape(vm["fund1_line2"])) \
+        .replace("__FUND2_TITLE__", _html_escape(vm["fund2_title"])) \
+        .replace("__FUND2_LINE1__", _html_escape(vm["fund2_line1"])) \
+        .replace("__FUND2_LINE2__", _html_escape(vm["fund2_line2"])) \
+        .replace("__ACTIONS_CLASS__", vm["actions_class"]) \
+        .replace("__ACTIONS__", actions_block) \
+        .replace("__STATUS__", _html_escape(vm["status"]))
 
 if __name__ == "__main__":
     run_monitoring()
