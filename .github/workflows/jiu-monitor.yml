@@ -37,6 +37,9 @@ jobs:
             last-alerts-
 
       - name: 运行监控脚本
+        env:
+          EMAIL_USER: ${{ secrets.EMAIL_USER }}
+          EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
         run: python main.py
 
       - name: 部署 HTML 到 GitHub Pages
