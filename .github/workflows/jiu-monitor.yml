@@ -15,9 +15,12 @@ on:
 jobs:
   monitor:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write          # 关键！
     steps:
       - name: 检出代码
         uses: actions/checkout@v4
+      # ... 其余步骤不变
 
       - name: 设置 Python
         uses: actions/setup-python@v5
