@@ -30,8 +30,8 @@ CONFIG = {
     "email": {
         "host": "smtp.163.com",
         "port": 465,
-        "user": "exist0619@163.com",
-        "password": "RAYXzFBWWRYwkfcu",   # ⚠️ 建议移到 GitHub Secrets
+        "user": os.environ.get("EMAIL_USER"),
+        "password": os.environ.get("EMAIL_PASSWORD"),
         "from": "exist0619@163.com",
         "to": ["6619110@qq.com"],
     },
