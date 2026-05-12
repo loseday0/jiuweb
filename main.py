@@ -274,12 +274,12 @@ def _maybe_notify(snapshot, est, bid, ask, bid_qty, ask_qty, prem_bid, prem_ask,
     if action == "申购":
         amt = None if price is None or qty is None else price * qty
         profit = None if price is None or est is None or qty is None else round((price - est) * qty)
-        msg = "{}|{}|{}|{}|{}\n>>>|{}|{}|{}|{}".format("申购", code, "卖出", price, qty, "申购", 1.0, amt if amt else "")
+        msg = "{}|{}|{}|{}|{}\n>>>|{}|{}|{}".format("申购", code, "卖出", price, qty, "申购", 1.0, amt if amt else "")
     else:
         amt = None if price is None or qty is None else price * qty
         qty2 = None if amt is None or est in (None, 0) else amt / est
         profit = None if price is None or est is None or qty is None else round((est * 0.995 - price) * qty)
-        msg = "{}|{}|{}|{}|{}\n>>>|{}|{}|{}|{}".format("赎回", code, "买入", price, qty, "赎回", est, qty2)
+        msg = "{}|{}|{}|{}|{}\n>>>|{}|{}|{}".format("赎回", code, "买入", price, qty, "赎回", est, qty2)
     content = "{}\n时间: {}".format(msg, now.strftime("%Y-%m-%d %H:%M:%S"))
     send_email(title, content)
 
