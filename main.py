@@ -308,6 +308,18 @@ def run_monitoring():
     print("开始执行监控...")
     last_alerts = load_last_alerts()
     snapshot = _build_snapshot()
+    # ===== 调试输出 =====
+    print("=== 诊断信息 ===")
+    print("溢价率 bid1:", snapshot["prem_bid1"])
+    print("溢价率 ask1:", snapshot["prem_ask1"])
+    print("溢价率 bid2:", snapshot["prem_bid2"])
+    print("溢价率 ask2:", snapshot["prem_ask2"])
+    print("EST1:", snapshot["est1"], "EST2:", snapshot["est2"])
+    print("阈值 申购:", CONFIG["thresholds"]["subscribe_premium"])
+    print("阈值 赎回:", CONFIG["thresholds"]["redeem_premium"])
+    print("阈值 交换:", CONFIG["thresholds"]["rotate_spread"])
+    print("冷却记录 keys:", list(last_alerts.keys()))
+    # =================
     now = snapshot["now"]
 
     # 处理申购/赎回提醒
