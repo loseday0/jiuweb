@@ -1,0 +1,40 @@
+name: 酒基金折溢价监控（交易时段）
+
+on:
+  schedule:
+    # 北京时间 9:30-11:30 (UTC 1:30-3:30)
+    - cron: '30-55/5 1 * * 1-5'
+    - cron: '*/5 2 * * 1-5'
+    - cron: '0-30/5 3 * * 1-5'
+    # 北京时间 13:00-15:00 (UTC 5:00-7:00)
+    - cron: '*/5 5 * * 1-5'
+    - cron: '*/5 6 * * 1-5'
+    - cron: '0 7 * * 1-5'
+  workflow_dispatch:   # 支持手动测试
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 设置 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: 安装依赖（如有）
+        run: |
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+      - name: 恢复上次冷却记录（cache）
+        uses: actions/cache@v4
+        with:
+          path: last_alerts.pkl
+          key: last-alerts-${{ hashFiles('main.py') }}
+          restore-keys: |
+            last-alerts-
+
+      - name: 运行监控脚本
+        run: python main.py
