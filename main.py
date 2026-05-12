@@ -13,8 +13,8 @@ from email.message import EmailMessage
 # ================= 配置区 =================
 CONFIG = {
     "thresholds": {
-        "subscribe_premium": 0.0,
-        "subscribe_premium_2": 0.0,
+        "subscribe_premium": 0.5,
+        "subscribe_premium_2": 0.8,
         "redeem_premium": -0.8,
         "redeem_premium_2": -1.2,
         "rotate_spread": 0.0,
