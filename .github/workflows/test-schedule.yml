@@ -1,0 +1,11 @@
+name: Test Schedule
+on:
+  schedule:
+    - cron: '* * * * *'
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Scheduled run at $(date)"
