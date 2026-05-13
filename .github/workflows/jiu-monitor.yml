@@ -1,0 +1,55 @@
+name: 酒基金折溢价监控（交易时段）
+
+on:
+  schedule:
+    # 北京时间 9:30-11:30 (UTC 1:30-3:30)
+    - cron: '30,35,40,45,50,55 1 * * 1-5'
+    - cron: '*/5 2 * * 1-5'                # 这个本来就合法
+    - cron: '0,5,10,15,20,25,30 3 * * 1-5'
+    # 北京时间 13:00-15:00 (UTC 5:00-7:00)
+    - cron: '*/5 5 * * 1-5'
+    - cron: '*/5 6 * * 1-5'
+    - cron: '0 7 * * 1-5'
+  workflow_dispatch:
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write          # 关键！
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+      # ... 其余步骤不变
+
+      - name: 设置 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: 安装依赖（如有）
+        run: |
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+      - name: 恢复上次冷却记录（cache）
+        uses: actions/cache@v4
+        with:
+          path: last_alerts.pkl
+          key: last-alerts-${{ hashFiles('main.py') }}
+          restore-keys: |
+            last-alerts-
+
+      - name: 运行监控脚本
+        env:
+          EMAIL_USER: ${{ secrets.EMAIL_USER }}
+          EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
+        run: python main.py
+
+      - name: 部署 HTML 到 GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./          # 因为我们生成的 index.html 在根目录
+          publish_branch: gh-pages # 推送到的分支
+          force_orphan: true       # 保持分支干净，只保留最新提交
+          commit_message: "更新监控页面 [skip ci]"
